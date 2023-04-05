@@ -14,7 +14,6 @@
   "details",
   "naming_series",
   "item_code",
-  "variant_of",
   "item_name",
   "item_group",
   "stock_uom",
@@ -22,7 +21,7 @@
   "disabled",
   "allow_alternative_item",
   "is_stock_item",
-  "include_item_in_manufacturing",
+  "has_variants",
   "opening_stock",
   "valuation_rate",
   "standard_rate",
@@ -66,7 +65,7 @@
   "has_serial_no",
   "serial_no_series",
   "variants_section",
-  "has_variants",
+  "variant_of",
   "variant_based_on",
   "attributes",
   "accounting",
@@ -112,8 +111,9 @@
   "quality_inspection_template",
   "inspection_required_before_delivery",
   "manufacturing",
-  "default_bom",
+  "include_item_in_manufacturing",
   "is_sub_contracted_item",
+  "default_bom",
   "column_break_74",
   "customer_code",
   "default_item_manufacturer",
@@ -479,7 +479,7 @@
    "collapsible_depends_on": "attributes",
    "depends_on": "eval:!doc.is_fixed_asset",
    "fieldname": "variants_section",
-   "fieldtype": "Section Break",
+   "fieldtype": "Tab Break",
    "label": "Variants"
   },
   {
@@ -504,7 +504,8 @@
    "fieldname": "attributes",
    "fieldtype": "Table",
    "hidden": 1,
-   "label": "Attributes",
+   "label": "Variant Attributes",
+   "mandatory_depends_on": "has_variants",
    "options": "Item Variant Attribute"
   },
   {
@@ -705,7 +706,7 @@
    "depends_on": "enable_deferred_expense",
    "fieldname": "no_of_months_exp",
    "fieldtype": "Int",
-   "label": "No of Months"
+   "label": "No of Months (Expense)"
   },
   {
    "collapsible": 1,
@@ -794,7 +795,7 @@
   },
   {
    "fieldname": "customer_code",
-   "fieldtype": "Data",
+   "fieldtype": "Small Text",
    "hidden": 1,
    "label": "Customer Code",
    "no_copy": 1,
@@ -909,7 +910,8 @@
  "image_field": "image",
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-06-08 11:35:20.094546",
+ "make_attachments_public": 1,
+ "modified": "2023-02-14 04:48:26.343620",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Item",

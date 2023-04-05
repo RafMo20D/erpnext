@@ -94,10 +94,13 @@ def get_balance_qty_from_sle(item_code, warehouse):
 
 
 def get_reserved_qty(item_code, warehouse):
+	dont_reserve_on_return = frappe.get_cached_value(
+		"Selling Settings", "Selling Settings", "dont_reserve_sales_order_qty_on_sales_return"
+	)
 	reserved_qty = frappe.db.sql(
-		"""
+		f"""
 		select
-			sum(dnpi_qty * ((so_item_qty - so_item_delivered_qty) / so_item_qty))
+			sum(dnpi_qty * ((so_item_qty - so_item_delivered_qty - if(dont_reserve_qty_on_return, so_item_returned_qty, 0)) / so_item_qty))
 		from
 			(
 				(select
@@ -112,26 +115,34 @@ def get_reserved_qty(item_code, warehouse):
 						where name = dnpi.parent_detail_docname
 						and delivered_by_supplier = 0
 					) as so_item_delivered_qty,
+					(
+						select returned_qty from `tabSales Order Item`
+						where name = dnpi.parent_detail_docname
+						and delivered_by_supplier = 0
+					) as so_item_returned_qty,
+					{dont_reserve_on_return} as dont_reserve_qty_on_return,
 					parent, name
 				from
 				(
 					select qty, parent_detail_docname, parent, name
 					from `tabPacked Item` dnpi_in
 					where item_code = %s and warehouse = %s
-					and parenttype="Sales Order"
+					and parenttype='Sales Order'
 					and item_code != parent_item
 					and exists (select * from `tabSales Order` so
-					where name = dnpi_in.parent and docstatus = 1 and status != 'Closed')
+					where name = dnpi_in.parent and docstatus = 1 and status not in ('On Hold', 'Closed'))
 				) dnpi)
 			union
 				(select stock_qty as dnpi_qty, qty as so_item_qty,
-					delivered_qty as so_item_delivered_qty, parent, name
+					delivered_qty as so_item_delivered_qty,
+					returned_qty as so_item_returned_qty,
+					{dont_reserve_on_return}, parent, name
 				from `tabSales Order Item` so_item
 				where item_code = %s and warehouse = %s
 				and (so_item.delivered_by_supplier is null or so_item.delivered_by_supplier = 0)
 				and exists(select * from `tabSales Order` so
 					where so.name = so_item.parent and so.docstatus = 1
-					and so.status != 'Closed'))
+					and so.status not in ('On Hold', 'Closed')))
 			) tab
 		where
 			so_item_qty >= so_item_delivered_qty
@@ -194,7 +205,7 @@ def get_planned_qty(item_code, warehouse):
 	planned_qty = frappe.db.sql(
 		"""
 		select sum(qty - produced_qty) from `tabWork Order`
-		where production_item = %s and fg_warehouse = %s and status not in ("Stopped", "Completed", "Closed")
+		where production_item = %s and fg_warehouse = %s and status not in ('Stopped', 'Completed', 'Closed')
 		and docstatus=1 and qty > produced_qty""",
 		(item_code, warehouse),
 	)

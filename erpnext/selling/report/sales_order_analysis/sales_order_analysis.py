@@ -53,6 +53,9 @@ def get_conditions(filters):
 	if filters.get("status"):
 		conditions += " and so.status in %(status)s"
 
+	if filters.get("warehouse"):
+		conditions += " and soi.warehouse = %(warehouse)s"
+
 	return conditions
 
 
@@ -64,7 +67,7 @@ def get_data(conditions, filters):
 			soi.delivery_date as delivery_date,
 			so.name as sales_order,
 			so.status, so.customer, soi.item_code,
-			DATEDIFF(CURDATE(), soi.delivery_date) as delay_days,
+			DATEDIFF(CURRENT_DATE, soi.delivery_date) as delay_days,
 			IF(so.status in ('Completed','To Bill'), 0, (SELECT delay_days)) as delay,
 			soi.qty, soi.delivered_qty,
 			(soi.qty - soi.delivered_qty) AS pending_qty,
@@ -172,7 +175,9 @@ def prepare_data(data, so_elapsed_time, filters):
 				# update existing entry
 				so_row = sales_order_map[so_name]
 				so_row["required_date"] = max(getdate(so_row["delivery_date"]), getdate(row["delivery_date"]))
-				so_row["delay"] = min(so_row["delay"], row["delay"])
+				so_row["delay"] = (
+					min(so_row["delay"], row["delay"]) if row["delay"] and so_row["delay"] else so_row["delay"]
+				)
 
 				# sum numeric columns
 				fields = [

@@ -6,7 +6,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.model.naming import make_autoname, revert_series_if_last
-from frappe.utils import cint, flt, get_link_to_form
+from frappe.utils import cint, flt, get_link_to_form, nowtime
 from frappe.utils.data import add_days
 from frappe.utils.jinja import render_template
 
@@ -179,7 +179,11 @@ def get_batch_qty(
 	out = 0
 	if batch_no and warehouse:
 		cond = ""
-		if posting_date and posting_time:
+
+		if posting_date:
+			if posting_time is None:
+				posting_time = nowtime()
+
 			cond = " and timestamp(posting_date, posting_time) <= timestamp('{0}', '{1}')".format(
 				posting_date, posting_time
 			)
@@ -291,7 +295,7 @@ def get_batch_no(item_code, warehouse, qty=1, throw=False, serial_no=None):
 	batches = get_batches(item_code, warehouse, qty, throw, serial_no)
 
 	for batch in batches:
-		if cint(qty) <= cint(batch.qty):
+		if flt(qty) <= flt(batch.qty):
 			batch_no = batch.batch_id
 			break
 
@@ -335,7 +339,7 @@ def get_batches(item_code, warehouse, qty=1, throw=False, serial_no=None):
 				on (`tabBatch`.batch_id = `tabStock Ledger Entry`.batch_no )
 		where `tabStock Ledger Entry`.item_code = %s and `tabStock Ledger Entry`.warehouse = %s
 			and `tabStock Ledger Entry`.is_cancelled = 0
-			and (`tabBatch`.expiry_date >= CURDATE() or `tabBatch`.expiry_date IS NULL) {0}
+			and (`tabBatch`.expiry_date >= CURRENT_DATE or `tabBatch`.expiry_date IS NULL) {0}
 		group by batch_id
 		order by `tabBatch`.expiry_date ASC, `tabBatch`.creation ASC
 	""".format(

@@ -6,7 +6,7 @@ import json
 
 import frappe
 import frappe.defaults
-from frappe import _, msgprint
+from frappe import _, msgprint, qb
 from frappe.contacts.address_and_contact import (
 	delete_contact_and_address,
 	load_address_and_contact,
@@ -14,7 +14,7 @@ from frappe.contacts.address_and_contact import (
 from frappe.desk.reportview import build_match_conditions, get_filters_cond
 from frappe.model.mapper import get_mapped_doc
 from frappe.model.naming import set_name_by_naming_series, set_name_from_naming_options
-from frappe.model.rename_doc import update_linked_doctypes
+from frappe.model.utils.rename_doc import update_linked_doctypes
 from frappe.utils import cint, cstr, flt, get_formatted_email, today
 from frappe.utils.user import get_users_with_role
 
@@ -27,9 +27,6 @@ from erpnext.utilities.transaction_base import TransactionBase
 
 
 class Customer(TransactionBase):
-	def get_feed(self):
-		return self.customer_name
-
 	def onload(self):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
@@ -141,6 +138,9 @@ class Customer(TransactionBase):
 				)
 
 	def validate_internal_customer(self):
+		if not self.is_internal_customer:
+			self.represents_company = ""
+
 		internal_customer = frappe.db.get_value(
 			"Customer",
 			{
@@ -272,18 +272,9 @@ class Customer(TransactionBase):
 
 	def on_trash(self):
 		if self.customer_primary_contact:
-			frappe.db.sql(
-				"""
-				UPDATE `tabCustomer`
-				SET
-					customer_primary_contact=null,
-					customer_primary_address=null,
-					mobile_no=null,
-					email_id=null,
-					primary_address=null
-				WHERE name=%(name)s""",
-				{"name": self.name},
-			)
+			self.db_set("customer_primary_contact", None)
+		if self.customer_primary_address:
+			self.db_set("customer_primary_address", None)
 
 		delete_contact_and_address("Customer", self.name)
 		if self.lead_name:
@@ -291,7 +282,7 @@ class Customer(TransactionBase):
 
 	def after_rename(self, olddn, newdn, merge=False):
 		if frappe.defaults.get_global_default("cust_master_name") == "Customer Name":
-			frappe.db.set(self, "customer_name", newdn)
+			self.db_set("customer_name", newdn)
 
 	def set_loyalty_program(self):
 		if self.loyalty_program:
@@ -457,7 +448,13 @@ def get_nested_links(link_doctype, link_name, ignore_permissions=False):
 @frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_customer_list(doctype, txt, searchfield, start, page_len, filters=None):
+	from frappe.utils.deprecations import deprecation_warning
+
 	from erpnext.controllers.queries import get_fields
+
+	deprecation_warning(
+		"`get_customer_list` is deprecated and will be removed in version 15. Use `erpnext.controllers.queries.customer_query` instead."
+	)
 
 	fields = ["name", "customer_name", "customer_group", "territory"]
 
@@ -524,10 +521,13 @@ def check_credit_limit(customer, company, ignore_outstanding_sales_order=False, 
 					_("Please contact your administrator to extend the credit limits for {0}.").format(customer)
 				)
 
-			message = """Please contact any of the following users to extend the credit limits for {0}:
-				<br><br><ul><li>{1}</li></ul>""".format(
-				customer, "<li>".join(credit_controller_users_formatted)
+			user_list = "<br><br><ul><li>{0}</li></ul>".format(
+				"<li>".join(credit_controller_users_formatted)
 			)
+
+			message = _(
+				"Please contact any of the following users to extend the credit limits for {0}: {1}"
+			).format(customer, user_list)
 
 			# if the current user does not have permissions to override credit limit,
 			# prompt them to send out an email to the controller users
@@ -726,12 +726,15 @@ def make_address(args, is_primary_address=1):
 @frappe.validate_and_sanitize_search_inputs
 def get_customer_primary_contact(doctype, txt, searchfield, start, page_len, filters):
 	customer = filters.get("customer")
-	return frappe.db.sql(
-		"""
-		select `tabContact`.name from `tabContact`, `tabDynamic Link`
-			where `tabContact`.name = `tabDynamic Link`.parent and `tabDynamic Link`.link_name = %(customer)s
-			and `tabDynamic Link`.link_doctype = 'Customer'
-			and `tabContact`.name like %(txt)s
-		""",
-		{"customer": customer, "txt": "%%%s%%" % txt},
+
+	con = qb.DocType("Contact")
+	dlink = qb.DocType("Dynamic Link")
+
+	return (
+		qb.from_(con)
+		.join(dlink)
+		.on(con.name == dlink.parent)
+		.select(con.name, con.email_id)
+		.where((dlink.link_name == customer) & (con.name.like(f"%{txt}%")))
+		.run()
 	)

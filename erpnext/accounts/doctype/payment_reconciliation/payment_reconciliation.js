@@ -170,7 +170,7 @@ erpnext.accounts.PaymentReconciliationController = class PaymentReconciliationCo
 	}
 
 	reconcile() {
-		var show_dialog = this.frm.doc.allocation.filter(d => d.difference_amount && !d.difference_account);
+		var show_dialog = this.frm.doc.allocation.filter(d => d.difference_amount);
 
 		if (show_dialog && show_dialog.length) {
 
@@ -179,8 +179,12 @@ erpnext.accounts.PaymentReconciliationController = class PaymentReconciliationCo
 				title: __("Select Difference Account"),
 				fields: [
 					{
-						fieldname: "allocation", fieldtype: "Table", label: __("Allocation"),
-						data: this.data, in_place_edit: true,
+						fieldname: "allocation",
+						fieldtype: "Table",
+						label: __("Allocation"),
+						data: this.data,
+						in_place_edit: true,
+						cannot_add_rows: true,
 						get_data: () => {
 							return this.data;
 						},
@@ -218,6 +222,10 @@ erpnext.accounts.PaymentReconciliationController = class PaymentReconciliationCo
 							read_only: 1
 						}]
 					},
+					{
+						fieldtype: 'HTML',
+						options: "<b> New Journal Entry will be posted for the difference amount </b>"
+					}
 				],
 				primary_action: () => {
 					const args = dialog.get_values()["allocation"];
@@ -234,7 +242,7 @@ erpnext.accounts.PaymentReconciliationController = class PaymentReconciliationCo
 			});
 
 			this.frm.doc.allocation.forEach(d => {
-				if (d.difference_amount && !d.difference_account) {
+				if (d.difference_amount) {
 					dialog.fields_dict.allocation.df.data.push({
 						'docname': d.name,
 						'reference_name': d.reference_name,
@@ -263,5 +271,33 @@ erpnext.accounts.PaymentReconciliationController = class PaymentReconciliationCo
 		});
 	}
 };
+
+frappe.ui.form.on('Payment Reconciliation Allocation', {
+	allocated_amount: function(frm, cdt, cdn) {
+		let row = locals[cdt][cdn];
+		// filter invoice
+		let invoice = frm.doc.invoices.filter((x) => (x.invoice_number == row.invoice_number));
+		// filter payment
+		let payment = frm.doc.payments.filter((x) => (x.reference_name == row.reference_name));
+
+		frm.call({
+			doc: frm.doc,
+			method: 'calculate_difference_on_allocation_change',
+			args: {
+				payment_entry: payment,
+				invoice: invoice,
+				allocated_amount: row.allocated_amount
+			},
+			callback: (r) => {
+				if (r.message) {
+					row.difference_amount = r.message;
+					frm.refresh();
+				}
+			}
+		});
+	}
+});
+
+
 
 extend_cscript(cur_frm.cscript, new erpnext.accounts.PaymentReconciliationController({frm: cur_frm}));

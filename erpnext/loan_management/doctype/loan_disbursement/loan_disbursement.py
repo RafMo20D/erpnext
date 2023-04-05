@@ -29,7 +29,7 @@ class LoanDisbursement(AccountsController):
 	def on_cancel(self):
 		self.set_status_and_amounts(cancel=1)
 		self.make_gl_entries(cancel=1)
-		self.ignore_linked_doctypes = ["GL Entry"]
+		self.ignore_linked_doctypes = ["GL Entry", "Payment Ledger Entry"]
 
 	def set_missing_values(self):
 		if not self.disbursement_date:
@@ -191,7 +191,9 @@ def get_total_pledged_security_value(loan):
 
 	for security, qty in pledged_securities.items():
 		after_haircut_percentage = 100 - hair_cut_map.get(security)
-		security_value += (loan_security_price_map.get(security) * qty * after_haircut_percentage) / 100
+		security_value += (
+			loan_security_price_map.get(security, 0) * qty * after_haircut_percentage
+		) / 100
 
 	return security_value
 
@@ -209,6 +211,9 @@ def get_disbursal_amount(loan, on_current_security_price=0):
 			"loan_amount",
 			"disbursed_amount",
 			"total_payment",
+			"debit_adjustment_amount",
+			"credit_adjustment_amount",
+			"refund_amount",
 			"total_principal_paid",
 			"total_interest_payable",
 			"status",
